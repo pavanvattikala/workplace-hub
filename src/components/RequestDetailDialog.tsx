@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ResourceRequest, Status } from '@/types/models';
-import { useAppContext } from '@/hooks/useAppContext';
+// --- ADDED ALL_USERS TO IMPORT ---
+import { useAppContext, ALL_USERS } from '@/hooks/useAppContext';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,6 @@ interface RequestDetailDialogProps {
 }
 
 export function RequestDetailDialog({ request, open, onOpenChange }: RequestDetailDialogProps) {
-  // 1. Get the live 'requests' array from the context
   const { currentUser, updateRequest, requests } = useAppContext();
   const isApprover = currentUser.role === 'Approver';
 
@@ -28,12 +28,15 @@ export function RequestDetailDialog({ request, open, onOpenChange }: RequestDeta
   const [editJust, setEditJust] = useState('');
   const [handlerComment, setHandlerComment] = useState('');
 
-  // 2. Derive the most up-to-date request dynamically so the UI updates instantly
   const liveRequest = request 
     ? requests.find(r => r.requestId === request.requestId) || request 
     : null;
 
   if (!liveRequest) return null;
+
+  // --- NEW: Find the actual user objects to display their names ---
+  const assignedApprover = ALL_USERS.find(u => u.id === liveRequest.assignedApproverId);
+  const requester = ALL_USERS.find(u => u.id === liveRequest.requesterId);
 
   const canEdit = !isApprover && liveRequest.status === Status.SUBMITTED;
   const canClose = liveRequest.status === Status.FULFILLED;
@@ -60,17 +63,14 @@ export function RequestDetailDialog({ request, open, onOpenChange }: RequestDeta
     onOpenChange(false);
   };
 
-const handleExport = async (format: 'pdf' | 'csv') => {
+  const handleExport = async (format: 'pdf' | 'csv') => {
     if (format === 'pdf') {
-      // Trigger the browser's native print dialog
       window.print();
       return;
     }
 
-    // Handle CSV export via the FastAPI backend
     try {
       const toastId = toast.loading('Generating CSV...');
-      
       const response = await fetch(`http://localhost:8000/api/requests/${liveRequest.requestId}/export/csv`);
       
       if (!response.ok) throw new Error('Export failed on backend');
@@ -95,7 +95,6 @@ const handleExport = async (format: 'pdf' | 'csv') => {
       console.error(error);
     }
   };
-
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); setEditing(false); }}>
@@ -139,8 +138,19 @@ const handleExport = async (format: 'pdf' | 'csv') => {
 
           <Separator />
 
-          {/* Dates */}
+          {/* Users & Dates */}
           <div className="grid grid-cols-2 gap-4 text-xs">
+            {/* --- NEW: Display the Users --- */}
+            <div>
+              <span className="text-muted-foreground">Requested By</span>
+              <p className="font-medium mt-0.5">{requester?.name || liveRequest.requesterId}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Assigned Approver</span>
+              <p className="font-medium mt-0.5">{assignedApprover?.name || 'Unassigned'}</p>
+            </div>
+            {/* ------------------------------ */}
+            
             <div>
               <span className="text-muted-foreground">Requested Date</span>
               <p className="font-medium mt-0.5">{format(new Date(liveRequest.requestedDate), 'PPP')}</p>
@@ -174,7 +184,7 @@ const handleExport = async (format: 'pdf' | 'csv') => {
           {isApprover && ![Status.CLOSED, Status.REJECTED].includes(liveRequest.status) && (
             <>
               <Separator />
-              <div className="space-y-3">
+              <div className="space-y-3 print:hidden">
                 <Label className="text-xs font-semibold">Handler Actions</Label>
                 <Textarea
                   placeholder="Add a comment..."
@@ -207,19 +217,19 @@ const handleExport = async (format: 'pdf' | 'csv') => {
           {!isApprover && canClose && (
             <>
               <Separator />
-              <Button size="sm" variant="outline" onClick={() => handleAction(Status.CLOSED)}>Close Request</Button>
+              <Button size="sm" variant="outline" className="print:hidden" onClick={() => handleAction(Status.CLOSED)}>Close Request</Button>
             </>
           )}
         </div>
 
-        <DialogFooter className="flex-row justify-between sm:justify-between mt-4">
+        {/* Note the print:hidden class to hide buttons when creating the PDF */}
+        <DialogFooter className="flex-row justify-between sm:justify-between mt-4 print:hidden">
           <div className="flex gap-2">
             {canEdit && !editing && (
               <Button variant="outline" size="sm" onClick={startEdit}>
                 <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
               </Button>
             )}
-            {/* Replaced single export with PDF and CSV options */}
             <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
               <Download className="h-3.5 w-3.5 mr-1" /> PDF
             </Button>

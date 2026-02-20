@@ -1,14 +1,18 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { User, UserRole, ResourceRequest, Status } from '@/types/models';
-// We keep mockUsers to toggle between Alex and Jordan for testing,
-// but we remove mockRequests since we will fetch them from the database!
-import { mockUsers } from '@/data/mock-data';
+import { User, ResourceRequest } from '@/types/models';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
+export const ALL_USERS: User[] = [
+  { id: 'u-1', name: 'Alex (Requester)', email: 'alex@company.com', role: 'Requester' },
+  { id: 'u-4', name: 'Sarah (Requester)', email: 'sarah@company.com', role: 'Requester' },
+  { id: 'u-2', name: 'Jordan (IT Approver)', email: 'jordan@company.com', role: 'Approver' },
+  { id: 'u-3', name: 'Taylor (Facility Approver)', email: 'taylor@company.com', role: 'Approver' },
+];
+
 interface AppContextType {
   currentUser: User;
-  toggleRole: () => void;
+  setCurrentUser: (user: User) => void; 
   requests: ResourceRequest[];
   addRequest: (req: ResourceRequest) => void;
   updateRequest: (requestId: string, updates: Partial<ResourceRequest>) => void;
@@ -17,24 +21,22 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [role, setRole] = useState<UserRole>('Requester');
+  // 1. Initialize with Alex as the default user
+  const [currentUser, setCurrentUser] = useState<User>(ALL_USERS[0]);
   
-  // Initialize with an empty array instead of mock data
-  const [requests, setRequests] = useState<ResourceRequest[]>([]);
+  // 2. Track ALL requests in the system
+  const [allRequests, setAllRequests] = useState<ResourceRequest[]>([]);
 
-  const currentUser: User = role === 'Requester' ? mockUsers[0] : mockUsers[1];
-
-  // 1. Fetch data from FastAPI on component mount
+  // Fetch data from FastAPI on component mount
   const fetchRequests = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/requests`);
       if (response.ok) {
         const data = await response.json();
-        // Sort by newest first
         const sortedData = data.sort((a: ResourceRequest, b: ResourceRequest) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        setRequests(sortedData);
+        setAllRequests(sortedData);
       } else {
         console.error('Failed to fetch requests from backend');
       }
@@ -43,19 +45,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Trigger the fetch when the app loads
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
 
-  const toggleRole = useCallback(() => {
-    setRole((prev) => (prev === 'Requester' ? 'Approver' : 'Requester'));
-  }, []);
-
-  // 2. Send POST request to FastAPI when creating a request
+  // Send POST request to FastAPI when creating a request
   const addRequest = useCallback(async (req: ResourceRequest) => {
     try {
-      // Format payload to match our Pydantic RequestCreate schema
       const payload = {
         requesterId: currentUser.id,
         requestType: req.requestType,
@@ -73,8 +69,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (response.ok) {
         const newRequest = await response.json();
-        // Add the database-generated request (with real ID and dates) to the UI
-        setRequests((prev) => [newRequest, ...prev]);
+        setAllRequests((prev) => [newRequest, ...prev]);
       } else {
         console.error('Failed to create request');
       }
@@ -83,12 +78,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser.id]);
 
-    // 3. Send PUT request to FastAPI when approving/rejecting
-// 3. Send PUT request to FastAPI when approving/rejecting OR editing
+  // Send PUT request to FastAPI when approving/rejecting OR editing
   const updateRequest = useCallback(async (requestId: string, updates: Partial<ResourceRequest>) => {
     try {
       if (updates.status) {
-        // --- SCENARIO A: It's a STATUS update (Approver action) ---
+        // SCENARIO A: STATUS update (Approver action)
         const payload = {
           status: updates.status,
           handlerComments: updates.handlerComments || null,
@@ -102,15 +96,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (response.ok) {
           const updatedRequest = await response.json();
-          // Update the UI with the backend response
-          setRequests((prev) =>
+          setAllRequests((prev) =>
             prev.map((r) => (r.requestId === requestId ? updatedRequest : r))
           );
-        } else {
-          console.error('Failed to update request status');
         }
       } else {
-        // --- SCENARIO B: It's a DETAILS update (Requester editing their text) ---
+        // SCENARIO B: DETAILS update (Requester editing their text)
         const payload = {
           shortDescription: updates.shortDescription,
           justification: updates.justification,
@@ -125,12 +116,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (response.ok) {
           const updatedRequest = await response.json();
-          // Update the UI with the backend response
-          setRequests((prev) =>
+          setAllRequests((prev) =>
             prev.map((r) => (r.requestId === requestId ? updatedRequest : r))
           );
-        } else {
-          console.error('Failed to update request details');
         }
       }
     } catch (error) {
@@ -138,8 +126,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // --- NEW FEATURE: Filter requests based on who is logged in ---
+  const visibleRequests = currentUser.role === 'Approver'
+    // Approvers only see what is assigned to them
+    ? allRequests.filter((req) => req.assignedApproverId === currentUser.id)
+    // Requesters only see what they created
+    : allRequests.filter((req) => req.requesterId === currentUser.id);
+
   return (
-    <AppContext.Provider value={{ currentUser, toggleRole, requests, addRequest, updateRequest }}>
+    <AppContext.Provider value={{ currentUser, setCurrentUser, requests: visibleRequests, addRequest, updateRequest }}>
       {children}
     </AppContext.Provider>
   );

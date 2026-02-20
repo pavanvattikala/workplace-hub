@@ -33,6 +33,7 @@ export interface ResourceRequest {
   requestId: string;
   requesterId: string;
   requestType: RequestType;
+  assignedApproverId?: string;
   shortDescription: string;
   justification: string;
   priority: Priority;
