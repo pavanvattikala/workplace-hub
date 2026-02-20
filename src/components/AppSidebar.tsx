@@ -2,14 +2,18 @@ import { LayoutDashboard, FileText, ClipboardCheck } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAppContext } from '@/hooks/useAppContext';
 
+// Added a "roles" array to specify who can see each item
 const navItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'My Requests', url: '/my-requests', icon: FileText },
-  { title: 'Pending Approvals', url: '/approvals', icon: ClipboardCheck },
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['Requester', 'Approver'] },
+  { title: 'My Requests', url: '/my-requests', icon: FileText, roles: ['Requester'] },
+  { title: 'Pending Approvals', url: '/approvals', icon: ClipboardCheck, roles: ['Approver'] },
 ];
 
 export function AppSidebar() {
   const { currentUser } = useAppContext();
+
+  // Filter the navigation items based on the current user's role
+  const visibleNavItems = navItems.filter((item) => item.roles.includes(currentUser.role));
 
   return (
     <aside className="hidden md:flex w-60 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
@@ -25,7 +29,7 @@ export function AppSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.url}
             to={item.url}

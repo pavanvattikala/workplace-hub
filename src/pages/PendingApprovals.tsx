@@ -5,11 +5,14 @@ import { RequestTable } from '@/components/RequestTable';
 import { RequestDetailDialog } from '@/components/RequestDetailDialog';
 
 export default function PendingApprovals() {
-  const { requests } = useAppContext();
+// --- ADDED currentUser ---
+  const { requests, currentUser } = useAppContext();
   const [selected, setSelected] = useState<ResourceRequest | null>(null);
 
-  // Approvers see all non-closed requests
-  const pending = requests.filter((r) => r.status !== Status.CLOSED);
+  // --- NEW: Filter for non-closed requests assigned specifically to this Approver ---
+  const pending = requests.filter(
+    (r) => r.status !== Status.CLOSED && r.assignedApproverId === currentUser.id
+  );
 
   return (
     <div className="space-y-6">

@@ -8,9 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 
 export default function MyRequests() {
-  const { requests } = useAppContext();
+const { requests, currentUser } = useAppContext();
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<ResourceRequest | null>(null);
+
+  // --- NEW: Filter requests for the current requester ---
+  const myRequests = requests.filter(r => r.requesterId === currentUser.id);
+  
 
   return (
     <div className="space-y-6">
